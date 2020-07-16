@@ -1,0 +1,129 @@
+steps:
+  - id: 'docker build'
+    name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - --tag
+      - gcr.io/${PROJECT_ID}/print-zone
+      - .
+  - id: 'docker push'
+    name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - gcr.io/${PROJECT_ID}/print-zone
+  - id: 'gcloud run deploy asia-northeast1'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - run
+      - deploy
+      - print-zone-tokyo
+      - --platform=managed
+      - --image=gcr.io/${PROJECT_ID}/print-zone
+      - --region=asia-northeast1
+      - --allow-unauthenticated
+  - id: 'create serverless neg asia-northeast1'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - beta
+      - compute
+      - network-endpoint-groups
+      - create
+      - print-zone-tokyo
+      - --region=asia-northeast1
+      - --network-endpoint-type=SERVERLESS
+      - --cloud-run-service=print-zone-tokyo
+  - id: 'gcloud run deploy asia-northeast2'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - run
+      - deploy
+      - print-zone-osaka
+      - --platform=managed
+      - --image=gcr.io/${PROJECT_ID}/print-zone
+      - --region=asia-northeast2
+      - --allow-unauthenticated
+  - id: 'create serverless neg asia-northeast2'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - beta
+      - compute
+      - network-endpoint-groups
+      - create
+      - print-zone-osaka
+      - --region=asia-northeast2
+      - --network-endpoint-type=SERVERLESS
+      - --cloud-run-service=print-zone-osaka
+  - id: 'create backend service'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - compute
+      - backend-services
+      - create
+      - print-zone-service
+      - --global
+  - id: 'add NEG asia-northeast1 to backend'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - beta
+      - compute
+      - backend-services
+      - add-backend
+      - print-zone-service
+      - --global
+      - --network-endpoint-group=print-zone-tokyo
+      - --network-endpoint-group-region=asia-northeast1
+  - id: 'add NEG asia-northeast2 to backend'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - beta
+      - compute
+      - backend-services
+      - add-backend
+      - print-zone-service
+      - --global
+      - --network-endpoint-group=print-zone-osaka
+      - --network-endpoint-group-region=asia-northeast2
+  - id: 'create URL map'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - compute
+      - url-maps
+      - create
+      - print-zone-lb
+      - --default-service=print-zone-service
+  - id: 'create HTTP proxy'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - compute
+      - target-http-proxies
+      - create
+      - print-zone-target-http-proxy
+      - --url-map=print-zone-lb
+  - id: 'create forwarding rule'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - compute
+      - forwarding-rules
+      - create
+      - print-zone-fw-rules
+      - --target-http-proxy=print-zone-target-http-proxy
+      - --global
+      - --ports=80
+  - id: 'show Load balancing IP address'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - compute
+      - forwarding-rules
+      - list
+      - --global
